@@ -100,8 +100,12 @@ body {
     color: white;
     border-radius: 12px 12px 0 0;
 }
-#mainMapFrame {
+/* 【修改点1/1：确保地图容器样式正确】 */
+/* 原#mainMapFrame选择器已不再需要，我们确保#map-container继承正确尺寸 */
+#map-container {
     flex-grow: 1;
     border: none;
     border-radius: 0 0 12px 12px;
+    /* 防止地图容器因内容为空而折叠 */
+    min-height: 500px;
 }
