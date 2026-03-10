@@ -1,7 +1,7 @@
-// script.js
+﻿// script.js
 /**
- * 【修改点1/1：新增百度地图初始化函数】
- * 根据文档1“任务11”的指导，创建并初始化地图。
+ * 初始化百度地图
+ * 使用百度地图JavaScript API 3.0标准版
  */
 function initBaiduMap() {
     // 确保地图容器存在
@@ -11,28 +11,34 @@ function initBaiduMap() {
         return;
     }
 
-    // 创建地图实例，使用BMapGL（WebGL版，性能更好）
-    var map = new BMapGL.Map("map-container");
+    // 创建地图实例
+    var map = new BMap.Map("map-container");
 
-    // 设置中心点坐标（使用文档中提供的济南坐标）
-    var point = new BMapGL.Point(117.078115728003, 36.6721433229127);
+    // 设置中心点坐标（济南市中心坐标）
+    var point = new BMap.Point(117.078115728003, 36.6721433229127);
 
-    // 初始化地图，设置中心点和缩放级别（文档中使用15级）
+    // 初始化地图，设置中心点和缩放级别
     map.centerAndZoom(point, 15);
 
     // 启用鼠标滚轮缩放
     map.enableScrollWheelZoom(true);
 
-    // 可选：添加平移和缩放控件
-    map.addControl(new BMapGL.NavigationControl());
+    // 添加平移和缩放控件
+    map.addControl(new BMap.NavigationControl());
 
-    // 将地图实例保存到全局变量，方便其他函数（如查询后添加标记）调用
+    // 添加比例尺控件
+    map.addControl(new BMap.ScaleControl());
+
+    // 添加地图类型控件
+    map.addControl(new BMap.MapTypeControl());
+
+    // 将地图实例保存到全局变量，方便其他函数调用
     window.baiduMap = map;
     console.log('百度地图初始化完成。');
 }
 
 /**
- * 处理“按时间查询”表单的提交
+ * 处理"按时间查询"表单的提交
  * 此函数会阻止表单默认提交，并通过Ajax将查询条件发送到Django后端。
  * 后端处理并返回结果页面URL，前端动态更新右侧的iframe以显示查询结果。
  */
@@ -71,7 +77,6 @@ function handleTimeQuery(event) {
             if (response.success && response.map_url) {
                 // 动态改变iframe的src，加载查询结果地图页面
                 // 注意：由于我们已替换为百度地图容器，此部分逻辑未来需改为直接在地图上添加覆盖物
-                // 目前为保持代码结构，暂时注释掉iframe相关操作，并给出提示
                 // $('#mainMapFrame').attr('src', response.map_url);
                 alert('查询功能后端接口已调用。前端地图已就绪，待集成查询结果数据渲染逻辑。');
                 $('#map-title').text('时间段车辆分布查询结果 (地图已加载)');
@@ -91,7 +96,7 @@ function handleTimeQuery(event) {
 }
 
 /**
- * 处理“按车辆查询”表单的提交
+ * 处理"按车辆查询"表单的提交
  * 逻辑与按时间查询类似，但查询参数不同。
  */
 function handleCarQuery(event) {
@@ -181,11 +186,11 @@ $(document).ready(function() {
     $('#carStartTime').val(formatDate(new Date(yesterday.setHours(10, 0, 0, 0))));
     $('#carEndTime').val(formatDate(new Date(yesterday.setHours(11, 0, 0, 0))));
 
-    // 【修改点2/1：页面加载完成后初始化百度地图】
+    // 页面加载完成后初始化百度地图
     // 等待页面所有元素（包括地图容器）加载完毕后再初始化地图
     initBaiduMap();
 
-    // 为“数据分析”按钮添加一个简单的点击确认（可选）
+    // 为"数据分析"按钮添加一个简单的点击确认（可选）
     $('#analysisForm').on('submit', function() {
         console.log('正在跳转到数据分析页面...');
         // 可以在这里添加一些预加载提示
