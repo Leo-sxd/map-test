@@ -1,7 +1,7 @@
 ﻿// script.js
 /**
  * 初始化百度地图
- * 使用百度地图JavaScript API 3.0标准版
+ * 使用百度地图JavaScript API GL版
  */
 function initBaiduMap() {
     // 确保地图容器存在
@@ -11,30 +11,38 @@ function initBaiduMap() {
         return;
     }
 
-    // 创建地图实例
-    var map = new BMap.Map("map-container");
+    try {
+        // 创建地图实例 - 使用BMapGL命名空间
+        var map = new BMapGL.Map("map-container");
 
-    // 设置中心点坐标（济南市中心坐标）
-    var point = new BMap.Point(117.078115728003, 36.6721433229127);
+        // 设置中心点坐标（济南市中心坐标）
+        var point = new BMapGL.Point(117.078115728003, 36.6721433229127);
 
-    // 初始化地图，设置中心点和缩放级别
-    map.centerAndZoom(point, 15);
+        // 初始化地图，设置中心点和缩放级别
+        map.centerAndZoom(point, 15);
 
-    // 启用鼠标滚轮缩放
-    map.enableScrollWheelZoom(true);
+        // 启用鼠标滚轮缩放
+        map.enableScrollWheelZoom(true);
 
-    // 添加平移和缩放控件
-    map.addControl(new BMap.NavigationControl());
+        // 添加平移和缩放控件
+        map.addControl(new BMapGL.NavigationControl3D());
 
-    // 添加比例尺控件
-    map.addControl(new BMap.ScaleControl());
+        // 添加比例尺控件
+        map.addControl(new BMapGL.ScaleControl());
 
-    // 添加地图类型控件
-    map.addControl(new BMap.MapTypeControl());
+        // 添加地图类型控件
+        map.addControl(new BMapGL.MapTypeControl());
 
-    // 将地图实例保存到全局变量，方便其他函数调用
-    window.baiduMap = map;
-    console.log('百度地图初始化完成。');
+        // 添加缩放控件
+        map.addControl(new BMapGL.ZoomControl());
+
+        // 将地图实例保存到全局变量，方便其他函数调用
+        window.baiduMap = map;
+        console.log('百度地图GL版初始化完成。');
+    } catch (error) {
+        console.error('百度地图初始化失败:', error);
+        document.getElementById('map-container').innerHTML = '<div style="text-align:center; padding-top:50px; color:red;">地图加载失败，请检查网络连接或API密钥</div>';
+    }
 }
 
 /**
