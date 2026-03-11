@@ -1,5 +1,15 @@
 ﻿// script.js
 /**
+ * 全局变量
+ */
+let map = null;                    // 地图实例
+let markers = [];                  // 标记点数组
+let circles = [];                  // 圆形标记数组
+let polylines = [];                // 轨迹线数组
+let infoWindows = [];              // 信息窗口数组
+let currentOverlayType = 'marker'; // 当前覆盖物类型
+
+/**
  * 初始化百度地图
  * 使用百度地图JavaScript API v3.0
  */
@@ -13,7 +23,7 @@ function initBaiduMap() {
 
     try {
         // 创建地图实例 - 使用BMap命名空间(v3.0标准版)
-        var map = new BMap.Map("map-container");
+        map = new BMap.Map("map-container");
 
         // 设置中心点坐标（济南市中心坐标）
         var point = new BMap.Point(117.078115728003, 36.6721433229127);
@@ -36,8 +46,6 @@ function initBaiduMap() {
         // 添加缩略图控件
         map.addControl(new BMap.OverviewMapControl());
 
-        // 将地图实例保存到全局变量，方便其他函数调用
-        window.baiduMap = map;
         console.log('百度地图v3.0初始化完成。');
     } catch (error) {
         console.error('百度地图初始化失败:', error);
@@ -46,19 +54,184 @@ function initBaiduMap() {
 }
 
 /**
+ * 清除地图上所有标记
+ */
+function clearAllMarkers() {
+    if (!map) return;
+    
+    // 清除标记点
+    markers.forEach(marker => map.removeOverlay(marker));
+    markers = [];
+    
+    // 清除圆形标记
+    circles.forEach(circle => map.removeOverlay(circle));
+    circles = [];
+    
+    // 清除轨迹线
+    polylines.forEach(polyline => map.removeOverlay(polyline));
+    polylines = [];
+    
+    // 关闭信息窗口
+    infoWindows.forEach(infoWindow => map.closeInfoWindow(infoWindow));
+    infoWindows = [];
+    
+    console.log('已清除所有地图标记');
+}
+
+/**
+ * 在地图上添加GPS点标记
+ * @param {Array} data - GPS数据数组
+ * @param {String} type - 标记类型: 'marker' | 'circle' | 'heatmap'
+ */
+function addMarkersToMap(data, type = 'marker') {
+    if (!map || !data || data.length === 0) {
+        console.warn('没有数据可显示');
+        return;
+    }
+    
+    // 先清除之前的标记
+    clearAllMarkers();
+    
+    console.log(`正在添加 ${data.length} 个标记点到地图`);
+    
+    // 计算中心点
+    let totalLat = 0, totalLon = 0;
+    
+    data.forEach((point, index) => {
+        const lat = point.lat;
+        const lon = point.lon;
+        
+        totalLat += lat;
+        totalLon += lon;
+        
+        const bmapPoint = new BMap.Point(lon, lat);
+        
+        if (type === 'marker') {
+            // 创建标准标记点
+            const marker = new BMap.Marker(bmapPoint);
+            
+            // 添加信息窗口
+            const infoContent = `
+                <div style="padding: 10px;">
+                    <h5>车辆信息</h5>
+                    <p>车牌号: ${point.commaddr}</p>
+                    <p>时间: ${new Date(point.utc * 1000).toLocaleString()}</p>
+                    <p>速度: ${point.speed} km/h</p>
+                    <p>方向: ${point.head}°</p>
+                    <p>坐标: ${lat.toFixed(6)}, ${lon.toFixed(6)}</p>
+                </div>
+            `;
+            const infoWindow = new BMap.InfoWindow(infoContent);
+            
+            marker.addEventListener('click', function() {
+                map.openInfoWindow(infoWindow, bmapPoint);
+            });
+            
+            map.addOverlay(marker);
+            markers.push(marker);
+            
+        } else if (type === 'circle') {
+            // 创建圆形标记
+            const circle = new BMap.Circle(bmapPoint, 50, {
+                strokeColor: 'blue',
+                strokeWeight: 2,
+                strokeOpacity: 0.5,
+                fillColor: 'blue',
+                fillOpacity: 0.3
+            });
+            
+            map.addOverlay(circle);
+            circles.push(circle);
+        }
+    });
+    
+    // 调整地图视野以显示所有标记
+    if (data.length > 0) {
+        const centerLat = totalLat / data.length;
+        const centerLon = totalLon / data.length;
+        const centerPoint = new BMap.Point(centerLon, centerLat);
+        
+        map.centerAndZoom(centerPoint, 14);
+        
+        // 如果有多个点，调整缩放级别以显示所有点
+        if (data.length > 1) {
+            const bounds = new BMap.Bounds();
+            data.forEach(point => {
+                bounds.extend(new BMap.Point(point.lon, point.lat));
+            });
+            map.setViewport(bounds);
+        }
+    }
+    
+    console.log(`成功添加 ${data.length} 个标记点`);
+}
+
+/**
+ * 绘制车辆轨迹
+ * @param {Array} data - GPS数据数组（已按时间排序）
+ */
+function drawTrajectory(data) {
+    if (!map || !data || data.length < 2) {
+        console.warn('数据不足，无法绘制轨迹');
+        return;
+    }
+    
+    // 清除之前的轨迹
+    polylines.forEach(polyline => map.removeOverlay(polyline));
+    polylines = [];
+    
+    // 创建轨迹点数组
+    const points = data.map(point => new BMap.Point(point.lon, point.lat));
+    
+    // 创建折线
+    const polyline = new BMap.Polyline(points, {
+        strokeColor: 'red',
+        strokeWeight: 3,
+        strokeOpacity: 0.8
+    });
+    
+    map.addOverlay(polyline);
+    polylines.push(polyline);
+    
+    // 添加起点和终点标记
+    const startPoint = points[0];
+    const endPoint = points[points.length - 1];
+    
+    const startMarker = new BMap.Marker(startPoint, {
+        icon: new BMap.Icon('http://api.map.baidu.com/img/markers.png', 
+            new BMap.Size(23, 25), {
+            offset: new BMap.Size(10, 25),
+            imageOffset: new BMap.Size(0, 0)
+        })
+    });
+    
+    const endMarker = new BMap.Marker(endPoint, {
+        icon: new BMap.Icon('http://api.map.baidu.com/img/markers.png', 
+            new BMap.Size(23, 25), {
+            offset: new BMap.Size(10, 25),
+            imageOffset: new BMap.Size(0, -25)
+        })
+    });
+    
+    map.addOverlay(startMarker);
+    map.addOverlay(endMarker);
+    markers.push(startMarker, endMarker);
+    
+    console.log(`成功绘制轨迹，共 ${points.length} 个点`);
+}
+
+/**
  * 处理"按时间查询"表单的提交
- * 此函数会阻止表单默认提交，并通过Ajax将查询条件发送到Django后端。
- * 后端处理并返回结果页面URL，前端动态更新右侧的iframe以显示查询结果。
  */
 function handleTimeQuery(event) {
-    event.preventDefault(); // 阻止表单默认提交刷新页面
+    event.preventDefault();
 
     const formData = {
         'startTime': $('#startTime').val(),
         'endTime': $('#endTime').val()
     };
 
-    // 简单的表单验证
+    // 表单验证
     if (!formData.startTime || !formData.endTime) {
         alert('请填写完整的起止时间！');
         return false;
@@ -70,24 +243,31 @@ function handleTimeQuery(event) {
 
     // 显示加载提示
     $('#map-title').text('正在查询，请稍候...');
+    
+    // 禁用查询按钮
+    const $btn = $('#timeQueryForm button[type="submit"]');
+    $btn.prop('disabled', true).text('查询中...');
 
-    // 发送Ajax请求到Django后端
-    // 注意：这里的URL `/query_by_time/` 需要与你在Django项目的urls.py中配置的路由一致
+    // 发送Ajax请求
     $.ajax({
-        url: '/query_by_time/',
+        url: 'http://localhost:8000/query_by_time/',
         type: 'POST',
         data: JSON.stringify(formData),
         contentType: 'application/json',
-        headers: {
-            'X-CSRFToken': getCookie('csrftoken') // Django需要CSRF Token
-        },
+        dataType: 'json',
         success: function(response) {
-            if (response.success && response.map_url) {
-                // 动态改变iframe的src，加载查询结果地图页面
-                // 注意：由于我们已替换为百度地图容器，此部分逻辑未来需改为直接在地图上添加覆盖物
-                // $('#mainMapFrame').attr('src', response.map_url);
-                alert('查询功能后端接口已调用。前端地图已就绪，待集成查询结果数据渲染逻辑。');
-                $('#map-title').text('时间段车辆分布查询结果 (地图已加载)');
+            if (response.success && response.data) {
+                // 在地图上显示标记
+                addMarkersToMap(response.data, 'marker');
+                
+                $('#map-title').text(`时间段车辆分布 - 共 ${response.total} 辆车`);
+                
+                // 显示成功提示
+                if (response.total > 0) {
+                    console.log(`成功加载 ${response.total} 个GPS点`);
+                } else {
+                    alert('该时间段内没有找到车辆数据');
+                }
             } else {
                 alert('查询失败：' + (response.message || '未知错误'));
                 $('#map-title').text('济南市出租车GPS数据地图');
@@ -95,17 +275,20 @@ function handleTimeQuery(event) {
         },
         error: function(xhr, status, error) {
             console.error("AJAX Error:", status, error);
-            alert('网络请求失败，请检查控制台或联系管理员。');
+            alert('网络请求失败，请确保后端服务已启动（python manage.py runserver）');
             $('#map-title').text('济南市出租车GPS数据地图');
+        },
+        complete: function() {
+            // 恢复按钮状态
+            $btn.prop('disabled', false).text('查询该时段车辆分布');
         }
     });
 
-    return false; // 保持表单不提交
+    return false;
 }
 
 /**
  * 处理"按车辆查询"表单的提交
- * 逻辑与按时间查询类似，但查询参数不同。
  */
 function handleCarQuery(event) {
     event.preventDefault();
@@ -126,23 +309,27 @@ function handleCarQuery(event) {
     }
 
     $('#map-title').text('正在查询车辆轨迹，请稍候...');
+    
+    // 禁用查询按钮
+    const $btn = $('#carQueryForm button[type="submit"]');
+    $btn.prop('disabled', true).text('查询中...');
 
-    // 注意：这里的URL `/query_by_car/` 需要与你在Django项目的urls.py中配置的路由一致
     $.ajax({
-        url: '/query_by_car/',
+        url: 'http://localhost:8000/query_by_car/',
         type: 'POST',
         data: JSON.stringify(formData),
         contentType: 'application/json',
-        headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-        },
+        dataType: 'json',
         success: function(response) {
-            if (response.success && response.map_url) {
-                // 动态改变iframe的src，加载查询结果地图页面
-                // 注意：由于我们已替换为百度地图容器，此部分逻辑未来需改为直接在地图上添加覆盖物
-                // $('#mainMapFrame').attr('src', response.map_url);
-                alert('车辆轨迹查询功能后端接口已调用。前端地图已就绪，待集成轨迹绘制逻辑。');
-                $('#map-title').text('车辆轨迹查询结果 - 车牌号: ' + formData.carId);
+            if (response.success && response.data) {
+                // 绘制车辆轨迹
+                drawTrajectory(response.data);
+                
+                $('#map-title').text(`车辆轨迹 - ${formData.carId} (${response.total} 个点)`);
+                
+                if (response.total === 0) {
+                    alert('未找到该车辆在该时间段的轨迹数据');
+                }
             } else {
                 alert('查询失败：' + (response.message || '未知错误'));
                 $('#map-title').text('济南市出租车GPS数据地图');
@@ -150,8 +337,12 @@ function handleCarQuery(event) {
         },
         error: function(xhr, status, error) {
             console.error("AJAX Error:", status, error);
-            alert('网络请求失败，请检查控制台或联系管理员。');
+            alert('网络请求失败，请确保后端服务已启动（python manage.py runserver）');
             $('#map-title').text('济南市出租车GPS数据地图');
+        },
+        complete: function() {
+            // 恢复按钮状态
+            $btn.prop('disabled', false).text('查询车辆轨迹');
         }
     });
 
@@ -159,33 +350,14 @@ function handleCarQuery(event) {
 }
 
 /**
- * 辅助函数：获取Cookie值，用于获取CSRF Token
- */
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
-/**
- * 页面加载完成后，为时间输入框设置一个合理的默认值（例如，文档中常用的0912日期的某时段）
- * 这只是一个示例，方便演示。
+ * 页面加载完成后初始化
  */
 $(document).ready(function() {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
 
-    // 格式化为HTML datetime-local input所需的格式 (YYYY-MM-DDThh:mm)
+    // 格式化为HTML datetime-local input所需的格式
     const formatDate = (date) => date.toISOString().slice(0, 16);
 
     // 设置默认查询时间为昨天的一个小时区间
@@ -194,13 +366,12 @@ $(document).ready(function() {
     $('#carStartTime').val(formatDate(new Date(yesterday.setHours(10, 0, 0, 0))));
     $('#carEndTime').val(formatDate(new Date(yesterday.setHours(11, 0, 0, 0))));
 
-    // 页面加载完成后初始化百度地图
-    // 等待页面所有元素（包括地图容器）加载完毕后再初始化地图
+    // 初始化百度地图
     initBaiduMap();
-
-    // 为"数据分析"按钮添加一个简单的点击确认（可选）
-    $('#analysisForm').on('submit', function() {
-        console.log('正在跳转到数据分析页面...');
-        // 可以在这里添加一些预加载提示
+    
+    // 添加清除标记按钮事件
+    $('#clearMarkersBtn').on('click', function() {
+        clearAllMarkers();
+        $('#map-title').text('济南市出租车GPS数据地图');
     });
 });
